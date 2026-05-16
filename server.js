@@ -12,6 +12,19 @@ const { Resolver } = require("dns").promises;
 const { decode } = require(path.join(__dirname, "rbxBinaryParser"));
 const { decodeXml, isXmlBuffer } = require(path.join(__dirname, "rbxXmlParser"));
 
+// ─── Server identity ─────────────────────────────────────────────────────────
+const SERVER_START = Date.now();
+
+let GIT_COMMIT = "unknown";
+try {
+  GIT_COMMIT = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+    cwd: __dirname,
+    encoding: "utf8",
+  }).trim();
+} catch {
+  // not a git repo or git unavailable
+}
+
 // ─── yt-dlp auto-update + self-reload ────────────────────────────────────────
 function checkAndUpdateYtdlp() {
   return new Promise((resolve) => {
@@ -192,7 +205,7 @@ async function resolveProxy() {
 function shouldBypassProxy(url) {
   try {
     const { hostname } = new URL(url);
-    return hostname === "drive.iidk.online" || hostname == "files.catbox.moe" || hostname === "cdn.discordapp.com" || hostname === "media.discordapp.net" || hostname === "assets.rbxcdn.com" || hostname === "assetdelivery.roblox.com";
+    return hostname === "drive.iidk.online" || hostname === "files.catbox.moe" || hostname === "cdn.discordapp.com" || hostname === "media.discordapp.net" || hostname === "assets.rbxcdn.com" || hostname === "assetdelivery.roblox.com";
   } catch {
     return false;
   }
@@ -788,6 +801,14 @@ function startServer() {
   });
 
   app.get("/health", (_req, res) => res.json({ ok: true }));
+
+  app.get("/status", (_req, res) => {
+    res.json({
+      system: os.hostname(),
+      commit: GIT_COMMIT,
+      uptime_seconds: Math.floor((Date.now() - SERVER_START) / 1000),
+    });
+  });
 
   app.listen(PORT, () => {
     console.log(`aegis_api listening on port ${PORT}`);
