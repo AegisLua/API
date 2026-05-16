@@ -397,7 +397,7 @@ async function downloadRoblox(id) {
 
 // ─── Temp file helpers ────────────────────────────────────────────────────────
 function tempPath(ext) {
-  return path.join(os.tmpdir(), `mediaapi_${uuidv4()}${ext}`);
+  return path.join(os.tmpdir(), `aegis_api_${uuidv4()}${ext}`);
 }
 
 function cleanup(...files) {
@@ -790,7 +790,7 @@ function startServer() {
   app.get("/health", (_req, res) => res.json({ ok: true }));
 
   app.listen(PORT, () => {
-    console.log(`mediaapi listening on port ${PORT}`);
+    console.log(`aegis_api listening on port ${PORT}`);
     if (!activeProxyUrl)
       console.warn("No working proxy - requests will use a direct connection");
   });
