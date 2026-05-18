@@ -593,7 +593,7 @@ function startServer() {
     for (const inst of instances) {
       if (typeof inst.Source === "string") {
         if (inst.Source.length > MAX_SOURCE_LEN || isSpamSource(inst.Source)) {
-          inst.Source = "";
+          inst.Source = "warn('Source removed by aegis_api: too large or spam. Scr name: '..script.Name);";
         }
       }
       if (Array.isArray(inst.Children)) sanitizeInstances(inst.Children);
