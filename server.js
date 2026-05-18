@@ -456,27 +456,23 @@ function toPng(inputPath, outputPath, maxScale) {
   });
 }
 
-// ─── Per-IP rate limiter ──────────────────────────────────────────────────────
-const RATE_LIMIT_MS = 1000;
-const rateLimitMap = new Map();
+// ─── Per-IP rate limiter (sliding window, 3/s) ────────────────────────────────
+const globalRateLimitMap = new Map();
 
 function rateLimitMiddleware(req, res, next) {
   const ip = req.ip;
   const now = Date.now();
-  const last = rateLimitMap.get(ip) ?? 0;
+  const windowStart = now - 1_000;
+  const timestamps = (globalRateLimitMap.get(ip) ?? []).filter((t) => t > windowStart);
 
-  if (now - last < RATE_LIMIT_MS) {
-    const retryAfter = ((RATE_LIMIT_MS - (now - last)) / 1000).toFixed(2);
+  if (timestamps.length >= 3) {
+    const retryAfter = ((timestamps[0] + 1_000 - now) / 1000).toFixed(2);
     res.set("Retry-After", retryAfter);
-    return res.status(429).json({ error: "Rate limit exceeded. Max 1 request per second per IP." });
+    return res.status(429).json({ error: "Rate limit exceeded. Max 3 requests per second per IP." });
   }
 
-  rateLimitMap.set(ip, now);
-
-  for (const [key, ts] of rateLimitMap) {
-    if (now - ts > RATE_LIMIT_MS) rateLimitMap.delete(key);
-  }
-
+  timestamps.push(now);
+  globalRateLimitMap.set(ip, timestamps);
   next();
 }
 
@@ -493,8 +489,10 @@ function rbxmRateLimiter(req, res, next) {
   const windowStart1  = now - 1_000;
   const inWindow60 = timestamps.filter((t) => t > windowStart60);
 
-  if (inWindow60.filter((t) => t > windowStart1).length >= 10) {
-    res.set("Retry-After", "1");
+  const inWindow1 = inWindow60.filter((t) => t > windowStart1);
+  if (inWindow1.length >= 10) {
+    const retryAfter = ((inWindow1[0] + 1_000 - now) / 1000).toFixed(2);
+    res.set("Retry-After", retryAfter);
     return res.status(429).json({ error: "Rate limit exceeded. Max 10 requests per second per IP." });
   }
   if (inWindow60.length >= 30) {
@@ -514,8 +512,8 @@ function startServer() {
   const PORT = process.env.PORT || 3000;
 
   app.use((req, res, next) => {
-    if (req.path.startsWith("/gifsplit/file")) {
-      return next(); // skip limiter
+    if (req.path.startsWith("/gifsplit/file") || req.path.startsWith("/rbxm")) {
+      return next(); // skip global limiter — /rbxm has its own
     }
     rateLimitMiddleware(req, res, next);
   });
