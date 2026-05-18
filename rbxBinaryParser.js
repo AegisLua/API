@@ -52,9 +52,10 @@ function i(e, a) {
 }
 
 function o(e) {
-    var a = Math.atan2(e[7], e[8]),
-        r = Math.atan2(-e[6], Math.sqrt(e[7] * e[7] + e[8] * e[8])),
-        t = Math.atan2(e[3], e[0]);
+    // YXZ intrinsic decomposition — matches Roblox's BasePart.Orientation / CFrame.fromEulerAnglesYXZ
+    var a = Math.atan2(-e[5], Math.sqrt(e[3] * e[3] + e[4] * e[4])),
+        r = Math.atan2(e[2], e[8]),
+        t = Math.atan2(e[3], e[4]);
     return [180 * a / Math.PI, 180 * r / Math.PI, 180 * t / Math.PI]
 }
 const y = {
@@ -691,7 +692,7 @@ class p {
         return this.interleavedUint32(e, (e => {
             const a = e >>> 24;
             if (0 === a) return 0;
-            const r = 2 ** (a - 127) * (1 + (e >>> 1 & 8388607) / 8388607);
+            const r = 2 ** (a - 127) * (1 + (e >>> 1 & 8388607) / 8388608);
             return 1 & e ? -r : r
         }))
     }

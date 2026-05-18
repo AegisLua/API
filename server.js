@@ -11,6 +11,7 @@ const { execFile, execFileSync, spawn } = require("child_process");
 const { Resolver } = require("dns").promises;
 const { decode } = require(path.join(__dirname, "rbxBinaryParser"));
 const { decodeXml, isXmlBuffer } = require(path.join(__dirname, "rbxXmlParser"));
+const { processCSGOperations } = require(path.join(__dirname, "csgPostProcess"));
 
 // ─── Server identity ─────────────────────────────────────────────────────────
 const SERVER_START = Date.now();
@@ -597,6 +598,8 @@ function startServer() {
         }
       }
       if (Array.isArray(inst.Children)) sanitizeInstances(inst.Children);
+      // Also sanitize scripts embedded inside reconstructed CSG child data
+      if (Array.isArray(inst._childInstances)) sanitizeInstances(inst._childInstances);
     }
   }
 
@@ -641,6 +644,7 @@ function startServer() {
       if (!decoded || typeof decoded !== "object")
         return res.status(500).json({ error: "Failed to decode RBXM/RBXMX data" });
 
+      await processCSGOperations(decoded, decode, decodeXml, downloadRoblox);
       sanitizeInstances(decoded);
       return res.status(200).json(decoded);
     } catch (err) {

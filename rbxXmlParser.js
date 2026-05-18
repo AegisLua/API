@@ -251,12 +251,13 @@ const m = {
         1032: ["Hot pink", [255, 0, 191]]
     };
 
-// ─── Rotation matrix → Euler angles (matches binary parser's `o` function) ──
+// ─── Rotation matrix → Euler angles (YXZ intrinsic, matches BasePart.Orientation) ──
 function matrixToEuler(m) {
   // m = [R00, R01, R02, R10, R11, R12, R20, R21, R22]
-  const a = Math.atan2(m[7], m[8]);
-  const b = Math.atan2(-m[6], Math.sqrt(m[7] * m[7] + m[8] * m[8]));
-  const c = Math.atan2(m[3], m[0]);
+  // YXZ decomposition: R = Ry(Y) * Rx(X) * Rz(Z)
+  const a = Math.atan2(-m[5], Math.sqrt(m[3] * m[3] + m[4] * m[4]));
+  const b = Math.atan2(m[2], m[8]);
+  const c = Math.atan2(m[3], m[4]);
   return [180 * a / Math.PI, 180 * b / Math.PI, 180 * c / Math.PI];
 }
 
