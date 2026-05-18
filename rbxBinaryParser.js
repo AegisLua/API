@@ -329,10 +329,10 @@ const y = {
     };
 
 function u(e) {
-    var a = e.uint32(!0),
-        r = "";
-    for (let t = 0; t < a; t++) r += String.fromCharCode(e.uint8());
-    return [r, a]
+    var a = e.uint32(!0);
+    var buf = Buffer.from(e.data.buffer, e.data.byteOffset + e.byteOffset, a);
+    e.move(a);
+    return [buf.toString('latin1'), a];
 }
 
 function N(e, a) {

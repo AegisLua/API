@@ -21,8 +21,8 @@ try {
     cwd: __dirname,
     encoding: "utf8",
   }).trim();
-} catch {
-  // not a git repo or git unavailable
+} catch (err) {
+  console.warn("Could not fetch git commit hash:", err.message);
 }
 
 // ─── yt-dlp auto-update + self-reload ────────────────────────────────────────
@@ -569,6 +569,37 @@ function startServer() {
     }
   });
 
+  // ─── Script source sanitizer ────────────────────────────────────────────────
+  // Clears Source properties that are too large or are spam (repetitive chars),
+  // preventing huge JSON payloads and server timeouts.
+  const MAX_SOURCE_LEN = 8_000_000; // 8 MB per script source
+
+  function isSpamSource(src) {
+    // Sample up to 500 positions to detect single-character spam
+    const sampleSize = Math.min(500, src.length);
+    const step = Math.max(1, Math.floor(src.length / sampleSize));
+    const counts = {};
+    let sampled = 0;
+    for (let i = 0; i < src.length && sampled < sampleSize; i += step, sampled++) {
+      const ch = src[i];
+      counts[ch] = (counts[ch] || 0) + 1;
+      if (counts[ch] / sampleSize > 0.95) return true;
+    }
+    return false;
+  }
+
+  function sanitizeInstances(instances) {
+    if (!Array.isArray(instances)) return;
+    for (const inst of instances) {
+      if (typeof inst.Source === "string") {
+        if (inst.Source.length > MAX_SOURCE_LEN || isSpamSource(inst.Source)) {
+          inst.Source = "";
+        }
+      }
+      if (Array.isArray(inst.Children)) sanitizeInstances(inst.Children);
+    }
+  }
+
   app.get("/rbxm", async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: "Missing url parameter" });
@@ -609,7 +640,8 @@ function startServer() {
  
       if (!decoded || typeof decoded !== "object")
         return res.status(500).json({ error: "Failed to decode RBXM/RBXMX data" });
- 
+
+      sanitizeInstances(decoded);
       return res.status(200).json(decoded);
     } catch (err) {
       console.error("/rbxm error:", err.message);
@@ -817,7 +849,7 @@ function startServer() {
   });
 
   // ─── Periodic proxy health check (every 30 minutes) ───────────────────────
-  const PROXY_PING_INTERVAL_MS = 30 * 60 * 1000;
+  const PROXY_PING_INTERVAL_MS = 60 * 1000;
 
   setInterval(async () => {
     console.log("Proxy ping check triggered...");
