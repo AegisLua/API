@@ -333,7 +333,7 @@ function u(e) {
     var a = e.uint32(!0);
     var buf = Buffer.from(e.data.buffer, e.data.byteOffset + e.byteOffset, a);
     e.move(a);
-    return [buf.toString('latin1'), a];
+    return [buf.toString('utf8'), a];
 }
 
 function N(e, a) {
