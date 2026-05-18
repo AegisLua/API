@@ -480,6 +480,34 @@ function rateLimitMiddleware(req, res, next) {
   next();
 }
 
+// ─── /rbxm sliding-window rate limiter (10/s, 30/min per IP) ─────────────────
+const rbxmRateLimitMap = new Map();
+
+function rbxmRateLimiter(req, res, next) {
+  const ip = req.ip;
+  const now = Date.now();
+  const timestamps = rbxmRateLimitMap.get(ip) ?? [];
+
+  // Drop timestamps outside the 1-minute window
+  const windowStart60 = now - 60_000;
+  const windowStart1  = now - 1_000;
+  const inWindow60 = timestamps.filter((t) => t > windowStart60);
+
+  if (inWindow60.filter((t) => t > windowStart1).length >= 10) {
+    res.set("Retry-After", "1");
+    return res.status(429).json({ error: "Rate limit exceeded. Max 10 requests per second per IP." });
+  }
+  if (inWindow60.length >= 30) {
+    const retryAfter = ((inWindow60[inWindow60.length - 30] + 60_000 - now) / 1000).toFixed(2);
+    res.set("Retry-After", retryAfter);
+    return res.status(429).json({ error: "Rate limit exceeded. Max 30 requests per minute per IP." });
+  }
+
+  inWindow60.push(now);
+  rbxmRateLimitMap.set(ip, inWindow60);
+  next();
+}
+
 // ─── Server ───────────────────────────────────────────────────────────────────
 function startServer() {
   const app = express();
@@ -610,7 +638,7 @@ function startServer() {
     }
   }
 
-  app.get("/rbxm", async (req, res) => {
+  app.get("/rbxm", rbxmRateLimiter, async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: "Missing url parameter" });
 
