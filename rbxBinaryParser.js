@@ -376,11 +376,17 @@ function S(e, a, r, N, instanceMap) {
                 Offset: S[e]
             };
             break;
-        case "UDim2":
+        case "UDim2": {
+            const preOffset = e.byteOffset;
+            const rawBytes = [];
+            for (let _i = 0; _i < Math.min(16, e.data.byteLength - preOffset); _i++)
+                rawBytes.push(e.data.getUint8(preOffset + _i));
+            console.log(`[UDim2 DEBUG] prop="${N}" count=${a} byteOffset=${preOffset} first16bytes=${JSON.stringify(rawBytes)}`);
             const p = e.interleavedFloat(a),
                 z = e.interleavedFloat(a),
                 x = e.interleavedInt32(a),
                 A = e.interleavedInt32(a);
+            console.log(`[UDim2 DEBUG] XScale=${JSON.stringify(p)} YScale=${JSON.stringify(z)} XOffset=${JSON.stringify(x)} YOffset=${JSON.stringify(A)}`);
             for (let e = 0; e < a; e++) l[e] = {
                 X: {
                     Scale: p[e],
@@ -392,6 +398,7 @@ function S(e, a, r, N, instanceMap) {
                 }
             };
             break;
+        }
         case "Ray":
             for (let r = 0; r < a; r++) {
                 const a = {
