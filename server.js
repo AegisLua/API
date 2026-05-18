@@ -62,22 +62,25 @@ async function bootstrap() {
     return;
   }
 
-  await resolveProxy();
+  _proxyInitPromise = resolveProxy();
   startServer();
 }
 
 if (process.env.YTDLP_SKIP_UPDATE === "1") {
   console.log("(Skipping yt-dlp update check on reloaded process)");
-  (async () => {
-    await resolveProxy();
-    startServer();
-  })();
+  _proxyInitPromise = resolveProxy();
+  startServer();
 } else {
   bootstrap();
 }
 
 // ─── Proxy config ────────────────────────────────────────────────────────────
 let activeProxyUrl = null;
+
+// Resolves when the initial proxy resolution attempt completes (success or not).
+// Download functions await this before using the proxy so the server can start
+// immediately without blocking unrelated endpoints.
+let _proxyInitPromise = null;
 
 // ─── Proxy refresh (with mutex) ───────────────────────────────────────────────
 let _proxyRefreshPromise = null;
@@ -312,7 +315,8 @@ function buildYtdlpArgs(sourceUrl, outputTemplate) {
   return args;
 }
 
-function downloadViaYtdlp(sourceUrl, outputTemplate) {
+async function downloadViaYtdlp(sourceUrl, outputTemplate) {
+  await _proxyInitPromise;
   return new Promise((resolve, reject) => {
     const args = buildYtdlpArgs(sourceUrl, outputTemplate);
     console.log(`Running yt-dlp for: ${sourceUrl}`);
@@ -354,6 +358,7 @@ function findYtdlpOutput(base) {
 
 // ─── Generic direct download ──────────────────────────────────────────────────
 async function downloadUrl(url) {
+  await _proxyInitPromise;
   try {
     const res = await axios.get(url, makeAxiosConfig(url));
     return res.data;
@@ -368,6 +373,7 @@ async function downloadUrl(url) {
 }
 
 async function downloadUrlAsBuffer(url) {
+  await _proxyInitPromise;
   try {
     const res = await axios.get(url, makeAxiosConfig(url, {responseType: "arraybuffer"}));
     return res.data;
@@ -385,6 +391,7 @@ const ROBLOSECURITY = process.env.ROBLOSECURITY;
 
 // ─── Roblox ID download ──────────────────────────────────────────────────
 async function downloadRoblox(id) {
+  await _proxyInitPromise;
   const url = "https://assetdelivery.roblox.com/v1/asset/";
   const axiosConfig = makeAxiosConfig(url, {
     responseType: "arraybuffer", 
@@ -757,6 +764,7 @@ function startServer() {
 
       if (useYtdlp) {
         console.log(`gifsplit: yt-dlp download for ${url}`);
+        await _proxyInitPromise;
         const ytBase = tempPath("");
         await new Promise((resolve, reject) => {
           const args = [

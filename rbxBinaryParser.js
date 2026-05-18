@@ -916,7 +916,7 @@ function c(e) {
             for (let e = 0; e < a; e++) {
                 R += r[e], v += t[e];
                 const a = s[R];
-                v < 0 ? C[R] = a : (s[v] ? s[v].Children.push(a) : C[R] = a)
+                v < 0 ? C.push(a) : (s[v] ? s[v].Children.push(a) : C.push(a))
             }
         }
     }
