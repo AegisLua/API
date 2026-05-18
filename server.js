@@ -848,23 +848,52 @@ function startServer() {
       console.warn("No working proxy - requests will use a direct connection");
   });
 
-  // ─── Periodic proxy health check (every 30 minutes) ───────────────────────
-  const PROXY_PING_INTERVAL_MS = 60 * 1000;
+  // ─── Periodic checks (every 60 seconds) ─────────────────────────────────────
+  const POLL_INTERVAL_MS = 60 * 1000;
+
+  function gitExec(args) {
+    return new Promise((resolve, reject) => {
+      execFile("git", args, { cwd: __dirname, timeout: 15000 }, (err, stdout, stderr) => {
+        if (err) return reject(new Error(stderr.trim() || err.message));
+        resolve(stdout.trim());
+      });
+    });
+  }
+
+  async function checkForUpdates() {
+    try {
+      await gitExec(["fetch", "--quiet"]);
+      const local  = await gitExec(["rev-parse", "HEAD"]);
+      const remote = await gitExec(["rev-parse", "@{u}"]);
+      if (local === remote) return;
+      console.log(`New commit detected (${local.slice(0,7)} → ${remote.slice(0,7)}) - pulling and restarting...`);
+      await gitExec(["pull", "--ff-only"]);
+      execFile("sudo", ["systemctl", "restart", "aegis-api"], { timeout: 10000 }, (err) => {
+        if (err) console.error("systemctl restart failed:", err.message);
+      });
+    } catch (err) {
+      console.warn("Git update check failed:", err.message);
+    }
+  }
 
   setInterval(async () => {
+    // Proxy health check
     console.log("Proxy ping check triggered...");
     if (!activeProxyUrl) {
       console.log("No active proxy - attempting to find one...");
       await resolveProxy();
-      return;
+    } else {
+      try {
+        await testProxy(activeProxyUrl, 5000);
+        console.log(`Proxy ping OK: ${activeProxyUrl}`);
+      } catch {
+        console.warn(`Proxy ping failed for ${activeProxyUrl} - refreshing...`);
+        await refreshProxy();
+        console.log(`Proxy after refresh: ${activeProxyUrl ?? "none (direct)"}`);
+      }
     }
-    try {
-      await testProxy(activeProxyUrl, 5000);
-      console.log(`Proxy ping OK: ${activeProxyUrl}`);
-    } catch {
-      console.warn(`Proxy ping failed for ${activeProxyUrl} - refreshing...`);
-      await refreshProxy();
-      console.log(`Proxy after refresh: ${activeProxyUrl ?? "none (direct)"}`);
-    }
-  }, PROXY_PING_INTERVAL_MS).unref();
+
+    // Git update check (always direct, never proxied)
+    await checkForUpdates();
+  }, POLL_INTERVAL_MS).unref();
 }
