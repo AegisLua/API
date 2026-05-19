@@ -9,6 +9,7 @@ const os = require("os");
 const { v4: uuidv4 } = require("uuid");
 const { execFile, execFileSync, spawn } = require("child_process");
 const { Resolver } = require("dns").promises;
+const { Worker } = require("worker_threads");
 const { decode } = require(path.join(__dirname, "rbxBinaryParser"));
 const { decodeXml, isXmlBuffer } = require(path.join(__dirname, "rbxXmlParser"));
 const { processCSGOperations } = require(path.join(__dirname, "csgPostProcess"));
@@ -636,6 +637,36 @@ function startServer() {
     }
   }
 
+  // Offloads all CPU-intensive RBXM work (decode + CSG + sanitize) to a worker
+  // thread so the main event loop stays free to handle other requests.
+  function runRbxmWorker(buffer) {
+    return new Promise((resolve, reject) => {
+      const worker = new Worker(path.join(__dirname, "rbxmWorker.js"), {
+        workerData: {
+          bufferData: buffer,
+          proxyUrl: activeProxyUrl,
+          roblosecurity: ROBLOSECURITY,
+        },
+        transferList: [buffer.buffer],
+      });
+
+      const timer = setTimeout(() => {
+        worker.terminate();
+        reject(new Error("RBXM processing timed out (data too large or union parsing too deep)"));
+      }, 30_000);
+
+      worker.once("message", ({ result, error }) => {
+        clearTimeout(timer);
+        if (error) reject(new Error(error));
+        else resolve(result);
+      });
+      worker.once("error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+  }
+
   app.get("/rbxm", rbxmRateLimiter, async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: "Missing url parameter" });
@@ -663,22 +694,8 @@ function startServer() {
 
       if (!buffer) return res.status(404).json({ error: "Asset not found" });
 
-      let decoded;
-      if (isXmlBuffer(buffer)) {
-        decoded = decodeXml(buffer);
-      } else {
-        const arrayBuffer = buffer.buffer.slice(
-          buffer.byteOffset,
-          buffer.byteOffset + buffer.byteLength
-        );
-        decoded = decode(arrayBuffer);
-      }
- 
-      if (!decoded || typeof decoded !== "object")
-        return res.status(500).json({ error: "Failed to decode RBXM/RBXMX data" });
+      const decoded = await runRbxmWorker(Buffer.from(buffer));
 
-      await processCSGOperations(decoded, decode, decodeXml, downloadRoblox);
-      sanitizeInstances(decoded);
       return res.status(200).json(decoded);
     } catch (err) {
       console.error("/rbxm error:", err.message);
